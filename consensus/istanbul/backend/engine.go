@@ -643,8 +643,6 @@ func (sb *Backend) StartValidating(hasBadBlock func(common.Hash) bool,
 			}
 		}
 		go sb.sendValEnodesShareMsgs()
-	} else {
-		sb.updateAnnounceVersion()
 	}
 
 	sb.coreStarted = true
