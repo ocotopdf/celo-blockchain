@@ -25,6 +25,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/syndtr/goleveldb/leveldb"
 	lvlerrors "github.com/syndtr/goleveldb/leveldb/errors"
@@ -33,6 +34,7 @@ import (
 	"github.com/syndtr/goleveldb/leveldb/util"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -133,8 +135,8 @@ type AddressEntry struct {
 }
 
 func (ve *AddressEntry) String() string {
-	return fmt.Sprintf("{enodeURL: %v, version: %v, highestKnownVersion: %d, numRetries: %d, lastRetry: %d}",
-	                   ve.Node.String(), ve.Version. ve.HighestKnownVersion, ve.NumRetries, ve.LastRetryTimestamp)
+	return fmt.Sprintf("{enodeURL: %v, version: %v, highestKnownVersion: %d, NumQueryAttemptsForTimestamp: %d, TimestampOfLastQuery: %d}",
+	                   ve.Node.String(), ve.Version, ve.HighestKnownVersion, ve.NumQueryAttemptsForTimestamp, ve.TimestampOfLastQuery)
 }
 
 // Implement RLP Encode/Decode interface
@@ -143,13 +145,13 @@ type rlpEntry struct {
 	EnodeURL string
 	Version  uint
 	HighestKnownVersion uint
-	NumRetries int
-	LastRetryTimestamp int64
+	NumQueryAttemptsForTimestamp int
+	TimestampOfLastQuery int64
 }
 
 // EncodeRLP serializes AddressEntry into the Ethereum RLP format.
 func (ve *AddressEntry) EncodeRLP(w io.Writer) error {
-	return rlp.Encode(w, rlpEntry{crypto.CompressPubkey(ve.PublicKey), ve.Node.String(), ve.Version, ve.NumRetries, ve.LastRetryTimestamp})
+	return rlp.Encode(w, rlpEntry{crypto.CompressPubkey(ve.PublicKey), ve.Node.String(), ve.Version, ve.HighestKnownVersion, ve.NumQueryAttemptsForTimestamp, ve.TimestampOfLastQuery})
 }
 
 
@@ -170,7 +172,7 @@ func (ve *AddressEntry) DecodeRLP(s *rlp.Stream) error {
 	        return err
 	}
 
-	*ve = AddressEntry{PublicKey: publicKey, Node: node, Version: entry.Version, entry.NumRetries, ve.LastRetryTimestamp}
+	*ve = AddressEntry{PublicKey: publicKey, Node: node, Version: entry.Version, HighestKnownVersion: entry.HighestKnownVersion, NumQueryAttemptsForTimestamp: entry.NumQueryAttemptsForTimestamp, TimestampOfLastQuery: entry.TimestampOfLastQuery}
 	return nil
 }
 
@@ -194,7 +196,7 @@ func OpenValidatorEnodeDB(path string, handler ValidatorEnodeHandler) (*Validato
 	if path == "" {
 		db, err = newMemoryDB()
 	} else {
-		db, err = newPersistentDB(int64(valEnodeDBVersion), path, logger)
+		db, err = newPersistentDB(int64(dbVersion), path, logger)
 	}
 
 	if err != nil {
@@ -319,7 +321,7 @@ func (vet *ValidatorEnodeDB) Upsert(valEnodeEntries map[common.Address]*AddressE
 
 		// If it's an old message, ignore it
 		if !isNew {
-		        if onlyHighestKnownVersionUpdate {
+		        if onlyHighestKnownVersionUpdated {
 			   if addressEntry.HighestKnownVersion < currentEntry.HighestKnownVersion {
 			     vet.logger.Trace("Ignoring the entry because its highestKnownVersion is lower than what is stored in the val enode db",
 				"entryAddress", remoteAddress, "newEntry", addressEntry.String(), "currentEntry", currentEntry.String())
@@ -335,7 +337,7 @@ func (vet *ValidatorEnodeDB) Upsert(valEnodeEntries map[common.Address]*AddressE
 		}
 
 		enodeURLChanged := false
-		if !isNew && !onlyHighestKnownVersionUpdate && addressEntry.Version > currentEntry.Version && addressEntry.enodeURL != currentEntry.enodeURL {
+		if !isNew && !onlyHighestKnownVersionUpdated && addressEntry.Version > currentEntry.Version && addressEntry.Node.String() != currentEntry.Node.String() {
 		   enodeURLChanged = true
 		}
 
@@ -344,20 +346,20 @@ func (vet *ValidatorEnodeDB) Upsert(valEnodeEntries map[common.Address]*AddressE
 
 		// First save the original values from currentEntry
 		if !isNew {
-		   entryToSave = currentEntry
+		   entryToSave = *currentEntry
 		}
 		
-		if onlyHighestKnownVersionUpdate {
-		   entryToSave.HighestKnownVersionToSave = addressEntry.HighestKnownVersionToSave
+		if onlyHighestKnownVersionUpdated {
+		   entryToSave.HighestKnownVersion = addressEntry.HighestKnownVersion
 		   // Reset the retries counter
 		   entryToSave.NumQueryAttemptsForTimestamp = 0
 		} else {
-		   entryToSave.EnodeURL = addressEntry.EnodeURL
+		   entryToSave.Node = addressEntry.Node
 		   entryToSave.Version = addressEntry.Version
 
 		   // Set the HighestKnownVersion if it's lower than Version or this is a new entry
-		   if isNew || (addressEntry.Version >= entryToSave.HighestKnownVersionToSave) {
-		      entryToSave.HighestKnownVersionToSave = addressEntry.Version
+		   if isNew || (addressEntry.Version >= entryToSave.HighestKnownVersion) {
+		      entryToSave.HighestKnownVersion = addressEntry.Version
 		      entryToSave.NumQueryAttemptsForTimestamp = 0
 		   }
 		}
@@ -406,7 +408,7 @@ func (vet *ValidatorEnodeDB) UpdateQueryEnodeStats(valAddresses []common.Address
      defer vet.lock.Unlock()
 
      batch := new(leveldb.Batch)
-     for valAddress := range valAddresses {
+     for _, valAddress := range valAddresses {
          currentEntry, err := vet.getAddressEntry(valAddress)
 
 	 if err != nil {
@@ -414,14 +416,14 @@ func (vet *ValidatorEnodeDB) UpdateQueryEnodeStats(valAddresses []common.Address
 	 }
 
 	 currentEntry.NumQueryAttemptsForTimestamp += 1
-	 currentEntry.TimestampOfLastQuery = time.Unix()
+	 currentEntry.TimestampOfLastQuery = time.Now().Unix()
 
 	 rawEntry, err := rlp.EncodeToBytes(currentEntry)
 	 if err != nil {
 		return err
 	 }
 
-	 batch.Put(addressKey(remoteAddress), rawEntry)
+	 batch.Put(addressKey(valAddress), rawEntry)
      }
 
      if batch.Len() > 0 {
