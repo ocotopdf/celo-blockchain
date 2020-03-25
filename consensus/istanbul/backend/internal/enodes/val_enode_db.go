@@ -17,13 +17,19 @@
 package enodes
 
 import (
-	"crypto/ecdsa"
+       "bytes"
+       "crypto/ecdsa"
+       "encoding/binary"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"sync"
 
 	"github.com/syndtr/goleveldb/leveldb"
+	lvlerrors "github.com/syndtr/goleveldb/leveldb/errors"
+	"github.com/syndtr/goleveldb/leveldb/opt"
+	"github.com/syndtr/goleveldb/leveldb/storage"
 	"github.com/syndtr/goleveldb/leveldb/util"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -34,11 +40,15 @@ import (
 
 // Keys in the node database.
 const (
-	valEnodeDBVersion = 4
+      dbVersionKey    = "version"  // Version of the database to flush if changes
+      dbAddressPrefix = "address:" // Identifier to prefix node entries with
+      dbNodeIDPrefix  = "nodeid:"
+)
 
-	dbAddressPrefix = "address:" // Identifier to prefix node entries with
-
-	dbNodeIDPrefix = "nodeid:" // Identifier to prefix node entries with
+const (
+      // dbNodeExpiration = 24 * time.Hour // Time after which an unseen node should be dropped.
+      // dbCleanupCycle   = time.Hour      // Time period for running the expiration task.
+      dbVersion = 3
 )
 
 // ValidatorEnodeHandler is handler to Add/Remove events. Events execute within write lock
