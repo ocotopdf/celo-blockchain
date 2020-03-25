@@ -89,8 +89,8 @@ func (sb *Backend) HandleMsg(addr common.Address, msg p2p.Msg, peer consensus.Pe
 		}
 
 		// Only use the recent messages and known messages cache for the
-		// Announce message.  That is the only message that is gossiped.
-		if msg.Code == istanbulAnnounceMsg {
+		// QueryEnode message.  That is the only message that is gossiped.
+		if msg.Code == istanbulQueryEnodeMsg {
 			hash := istanbul.RLPHash(data)
 
 			// Mark peer's message

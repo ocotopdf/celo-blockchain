@@ -17,6 +17,7 @@
 package istanbul
 
 import (
+	"crypto/ecdsa"
 	"encoding/hex"
 	"errors"
 	"math/big"
@@ -39,31 +40,31 @@ func RLPHash(v interface{}) (h common.Hash) {
 }
 
 // GetSignatureAddress gets the signer address from the signature
-func GetSignatureAddress(data []byte, sig []byte) (common.Address, error) {
+func GetSignatureAddress(data []byte, sig []byte) (common.Address, *ecdsa.PublicKey, error) {
 	// 1. Keccak data
 	hashData := crypto.Keccak256(data)
 	// 2. Recover public key
 	pubkey, err := crypto.SigToPub(hashData, sig)
 	if err != nil {
-		return common.Address{}, err
+		return common.Address{}, nil, err
 	}
-	return crypto.PubkeyToAddress(*pubkey), nil
+	return crypto.PubkeyToAddress(*pubkey), pubkey, nil
 }
 
-func CheckValidatorSignature(valSet ValidatorSet, data []byte, sig []byte) (common.Address, error) {
+func CheckValidatorSignature(valSet ValidatorSet, data []byte, sig []byte) (common.Address, *ecdsa.PublicKey, error) {
 	// 1. Get signature address
-	signer, err := GetSignatureAddress(data, sig)
+	signer, signerPubKey, err := GetSignatureAddress(data, sig)
 	if err != nil {
 		log.Error("Failed to get signer address", "err", err)
-		return common.Address{}, err
+		return common.Address{}, nil, err
 	}
 
 	// 2. Check validator
 	if _, val := valSet.GetByAddress(signer); val != nil {
-		return val.Address(), nil
+		return val.Address(), signerPubKey, nil
 	}
 
-	return common.Address{}, ErrUnauthorizedAddress
+	return common.Address{}, nil, ErrUnauthorizedAddress
 }
 
 // Retrieves the block number within an epoch.  The return value will be 1-based.

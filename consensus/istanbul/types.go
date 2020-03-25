@@ -17,6 +17,7 @@
 package istanbul
 
 import (
+	"crypto/ecdsa"
 	"fmt"
 	"io"
 	"math/big"
@@ -355,30 +356,32 @@ func (m *Message) Sign(signingFn func(data []byte) ([]byte, error)) error {
 	return err
 }
 
-func (m *Message) FromPayload(b []byte, validateFn func([]byte, []byte) (common.Address, error)) error {
+func (m *Message) FromPayload(b []byte, validateFn func([]byte, []byte) (common.Address, *ecdsa.PublicKey, error)) (*ecdsa.PublicKey, error) {
 	// Decode Message
 	err := rlp.DecodeBytes(b, &m)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
+	var pubkey *ecdsa.PublicKey
 	// Validate message (on a message without Signature)
 	if validateFn != nil {
+	        var signed_val_addr common.Address
 		var payload []byte
 		payload, err = m.PayloadNoSig()
 		if err != nil {
-			return err
+			return nil, err
 		}
 
-		signed_val_addr, err := validateFn(payload, m.Signature)
+		signed_val_addr, pubkey, err = validateFn(payload, m.Signature)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if signed_val_addr != m.Address {
-			return ErrInvalidSigner
+			return nil, ErrInvalidSigner
 		}
 	}
-	return nil
+	return pubkey, nil
 }
 
 func (m *Message) Payload() ([]byte, error) {

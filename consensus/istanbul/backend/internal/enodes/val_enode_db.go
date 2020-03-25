@@ -17,6 +17,7 @@
 package enodes
 
 import (
+	"crypto/ecdsa"
 	"fmt"
 	"io"
 	"strings"
@@ -117,8 +118,8 @@ type AddressEntry struct {
 	Node    *enode.Node
 	Version uint
 	HighestKnownVersion uint
-	NumRetries int
-	LastRetryTimestamp int64   // timestamp in unix time format
+	NumQueryAttemptsForTimestamp int
+	TimestampOfLastQuery int64   // timestamp in unix time format
 }
 
 func (ve *AddressEntry) String() string {
@@ -339,8 +340,7 @@ func (vet *ValidatorEnodeDB) Upsert(valEnodeEntries map[common.Address]*AddressE
 		if onlyHighestKnownVersionUpdate {
 		   entryToSave.HighestKnownVersionToSave = addressEntry.HighestKnownVersionToSave
 		   // Reset the retries counter
-		   entryToSave.NumQueryAttempts = 0
-		   entryToSave.LastRetryTimestamp = 0
+		   entryToSave.NumQueryAttemptsForTimestamp = 0
 		} else {
 		   entryToSave.EnodeURL = addressEntry.EnodeURL
 		   entryToSave.Version = addressEntry.Version
@@ -348,8 +348,7 @@ func (vet *ValidatorEnodeDB) Upsert(valEnodeEntries map[common.Address]*AddressE
 		   // Set the HighestKnownVersion if it's lower than Version or this is a new entry
 		   if isNew || (addressEntry.Version >= entryToSave.HighestKnownVersionToSave) {
 		      entryToSave.HighestKnownVersionToSave = addressEntry.Version
-		      entryToSave.NumQueryAttempts = 0
-		      entryToSave.LastRetryTimestamp = 0
+		      entryToSave.NumQueryAttemptsForTimestamp = 0
 		   }
 		}
 
@@ -390,6 +389,39 @@ func (vet *ValidatorEnodeDB) Upsert(valEnodeEntries map[common.Address]*AddressE
 	}
 
 	return nil
+}
+
+func (vet *ValidatorEnodeDB) UpdateQueryEnodeStats(valAddresses []common.Address) error {
+     vet.lock.Lock()
+     defer vet.lock.Unlock()
+
+     batch := new(leveldb.Batch)
+     for valAddress := range valAddresses {
+         currentEntry, err := vet.getAddressEntry(valAddress)
+
+	 if err != nil {
+	    return err
+	 }
+
+	 currentEntry.NumQueryAttemptsForTimestamp += 1
+	 currentEntry.TimestampOfLastQuery = time.Unix()
+
+	 rawEntry, err := rlp.EncodeToBytes(currentEntry)
+	 if err != nil {
+		return err
+	 }
+
+	 batch.Put(addressKey(remoteAddress), rawEntry)
+     }
+
+     if batch.Len() > 0 {
+     	err := vet.db.Write(batch, nil)
+	if err != nil {
+	   return err
+	}
+     }
+
+     return nil
 }
 
 // RemoveEntry will remove an entry from the table

@@ -17,7 +17,6 @@
 package backend
 
 import (
-	"crypto/ecdsa"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -42,11 +41,10 @@ import (
 // define the constants and function for the sendAnnounce thread
 
 const (
-	announceGossipCooldownDuration = 5 * time.Minute
+	queryEnodeGossipCooldownDuration = 5 * time.Minute
 	// Schedule retries to be strictly later than the cooldown duration
 	// that other nodes will impose for regossiping announces from this node.
 	announceRetryDuration          = announceGossipCooldownDuration + (30 * time.Second)
-	announceAnswerCooldownDuration = 5 * time.Minute
 
 	signedAnnounceVersionGossipCooldownDuration = 5 * time.Minute
 )
@@ -55,8 +53,6 @@ type announceHandler struct {
      sb *Backend
 
      announceValidatorSet map[common.Address]bool
-
-     querySendTimestampHeap *timestampHeap
 
      threadRunning   bool
      threadRunningMu sync.RWMutex
@@ -71,25 +67,6 @@ func newAnnounceHandler(sb *Backend) *announceHandler {
 		threadQuit: make(chan struct{}),
 		querySendTimestampHeap: &timestampHeap{}
 	}
-}
-
-type queryTimestampEntry struct {
-     queryTimestamp int64
-     recipientAddress common.Address
-}
-
-type queryTimestampHeap []*queryTimestampEntry
-
-func (th timestampHeap) Len() int           { return len(th) }
-func (th timestampHeap) Less(i, j int) bool { return th[i].queryTimestamp < th[j].queryTimestamp }
-func (th timestampHeap) Swap(i, j int)      { th[i], th[j] = th[j], tth[i] }
-func (th *timestampHeap) Push(x interface{}) { *th = append(*th, x.(*queryTimestampEntry)) }
-func (th *timestampHeap) Pop() interface{} {
-     old := *th
-     n := len(old)
-     x := old[n-1]
-     *th = old[0 : n-1]
-     return x
 }
 
 func (ah *announceHandler) startThread() error {
@@ -181,11 +158,13 @@ func (ah *announceHandler) thread() {
 			logger.Trace("Checking if this node should announce it's enode")
 			shouldPublishEnodeURL := sb.coreStarted && ah.validatorConnSet[sb.Address()]
 
-			// Send out a version message is this node just enabled publishing it's enodeURL
+			// Send out a version message if this node just enabled publishing it's enodeURL
 			if !publishingEnodeURL && shouldPublishEnodeURL {
 			   ah.updateAnnounceVersionCh <- struct{}
 			   publishingEnodeURL = true
 			   logger.Trace("Started publishing enode URL")
+			} else if !shouldPublishEnodeURL && publishingEnodeURL {
+			   publishingEnodeURL = false
 			}
 
 		// Periodically update this nodes's announce version number
@@ -309,200 +288,6 @@ func (sb *Backend) pruneAnnounceDataStructures() error {
 	return nil
 }
 
-// ===============================================================
-//
-// define the IstanbulAnnounce message format, the AnnounceMsgCache entries, the announce send function (both the gossip version and the "retrieve from cache" version), and the announce get function
-
-type announceRegossip struct {
-	Time    time.Time
-	Version uint
-}
-
-type scheduledAnnounceRegossip struct {
-	Timer   *time.Timer
-	Version uint
-}
-
-// answerAnnounceMsg will answer a received announce message from an origin
-// node. If the node is already a peer of any kind, an enodeCertificate will be sent.
-// Regardless, the origin node will be upserted into the val enode table
-// to ensure this node designates the origin node as a ValidatorPurpose peer.
-func (sb *Backend) answerAnnounceMsg(address common.Address, node *enode.Node, version uint) error {
-	targetIDs := map[enode.ID]bool{
-		node.ID(): true,
-	}
-	// The target could be an existing peer of any purpose.
-	matches := sb.broadcaster.FindPeers(targetIDs, p2p.AnyPurpose)
-	if matches[node.ID()] != nil {
-		enodeCertificateMsg, err := sb.retrieveEnodeCertificateMsg()
-		if err != nil {
-			return err
-		}
-		if err := sb.sendEnodeCertificateMsg(matches[node.ID()], enodeCertificateMsg); err != nil {
-			return err
-		}
-	}
-	// Upsert regardless to account for the case that the target is a non-ValidatorPurpose
-	// peer but should be.
-	// If the target is not a peer and should be a ValidatorPurpose peer, this
-	// will designate the target as a ValidatorPurpose peer and send an enodeCertificate
-	// during the istanbul handshake.
-	if err := sb.valEnodeTable.Upsert(map[common.Address]*vet.AddressEntry{address: {Node: node, Version: version}}); err != nil {
-		return err
-	}
-	return nil
-}
-
-// validateAnnounce will do some validation to check the contents of the announce
-// message. This is to force all validators that send an announce message to
-// create as succint message as possible, and prevent any possible network DOS attacks
-// via extremely large announce message.
-func (sb *Backend) validateAnnounce(msgAddress common.Address, announceData *announceData) (bool, error) {
-	logger := sb.logger.New("func", "validateAnnounce", "msg address", msgAddress)
-
-	// Ensure the version in the announceData is not older than the signed
-	// announce version if it is known by this node
-	knownVersion, err := sb.signedAnnounceVersionTable.GetVersion(msgAddress)
-	if err == nil && announceData.Version < knownVersion {
-		logger.Debug("Announce message has version older than known version from signed announce table", "msg version", announceData.Version, "known version", knownVersion)
-		return false, nil
-	}
-
-	// Check if there are any duplicates in the announce message
-	var encounteredAddresses = make(map[common.Address]bool)
-	for _, announceRecord := range announceData.AnnounceRecords {
-		if encounteredAddresses[announceRecord.DestAddress] {
-			logger.Info("Announce message has duplicate entries", "address", announceRecord.DestAddress)
-			return false, nil
-		}
-
-		encounteredAddresses[announceRecord.DestAddress] = true
-	}
-
-	// Check if the number of rows in the announcePayload is at most 2 times the size of the current validator connection set.
-	// Note that this is a heuristic of the actual size of validator connection set at the time the validator constructed the announce message.
-	validatorConnSet, err := sb.retrieveValidatorConnSet()
-	if err != nil {
-		return false, err
-	}
-
-	if len(announceData.AnnounceRecords) > 2*len(validatorConnSet) {
-		logger.Info("Number of announce message encrypted enodes is more than two times the size of the current validator connection set", "num announce enodes", len(announceData.AnnounceRecords), "reg/elected val set size", len(validatorConnSet))
-		return false, err
-	}
-
-	return true, nil
-}
-
-// scheduleAnnounceRegossip schedules a regossip for an announce message after
-// its cooldown period. If one is already scheduled, it's overwritten.
-func (sb *Backend) scheduleAnnounceRegossip(msg *istanbul.Message, announceVersion uint, payload []byte) error {
-	logger := sb.logger.New("func", "scheduleAnnounceRegossip", "msg address", msg.Address)
-	sb.scheduledAnnounceRegossipsMu.Lock()
-	defer sb.scheduledAnnounceRegossipsMu.Unlock()
-
-	// If another announce version regossip has been scheduled for the message
-	// address already, cancel it
-	if scheduledRegossip := sb.scheduledAnnounceRegossips[msg.Address]; scheduledRegossip != nil {
-		scheduledRegossip.Timer.Stop()
-	}
-
-	sb.lastAnnounceGossipedMu.RLock()
-	versionedGossipTime := sb.lastAnnounceGossiped[msg.Address]
-	if versionedGossipTime == nil {
-		logger.Debug("Last announce gossiped not found")
-		sb.lastAnnounceGossipedMu.RUnlock()
-		return nil
-	}
-	scheduledTime := versionedGossipTime.Time.Add(announceGossipCooldownDuration)
-	sb.lastAnnounceGossipedMu.RUnlock()
-
-	duration := time.Until(scheduledTime)
-	// If by this time the cooldown period has ended, just regossip
-	if duration < 0 {
-		return sb.regossipAnnounce(msg, announceVersion, payload, true)
-	}
-	regossipFunc := func() {
-		if err := sb.regossipAnnounce(msg, announceVersion, payload, true); err != nil {
-			logger.Debug("Error in scheduled announce regossip", "err", err)
-		}
-		sb.scheduledAnnounceRegossipsMu.Lock()
-		delete(sb.scheduledAnnounceRegossips, msg.Address)
-		sb.scheduledAnnounceRegossipsMu.Unlock()
-	}
-	sb.scheduledAnnounceRegossips[msg.Address] = &scheduledAnnounceRegossip{
-		Timer:   time.AfterFunc(duration, regossipFunc),
-		Version: announceVersion,
-	}
-	return nil
-}
-
-// regossipAnnounce will regossip a received announce message.
-// If this node regossiped an announce from the same source address within the last
-// 5 minutes, then it won't regossip. This is to prevent a malicious validator from
-// DOS'ing the network with very frequent announce messages.
-// This opens an attack vector where any malicious node could continue to gossip
-// a previously gossiped announce message from any validator, causing other nodes to regossip and
-// enforce the cooldown period for future messages originating from the origin validator.
-// This could result in new legitimate announce messages from the origin validator
-// not being regossiped due to the cooldown period enforced by the other nodes in
-// the network.
-// To ensure that a new legitimate message will eventually be gossiped to the rest
-// of the network, we schedule an announce message with a new version that is
-// received during the cooldown period to be sent after the cooldown period ends,
-// and refuse to regossip old messages from the validator during that time.
-// Providing `force` as true will skip any of the DOS checks.
-func (sb *Backend) regossipAnnounce(msg *istanbul.Message, announceVersion uint, payload []byte, force bool) error {
-	logger := sb.logger.New("func", "regossipAnnounce", "announceSourceAddress", msg.Address, "announceVersion", announceVersion)
-
-	if !force {
-		sb.scheduledAnnounceRegossipsMu.RLock()
-		scheduledRegossip := sb.scheduledAnnounceRegossips[msg.Address]
-		// if a regossip for this msg address has been scheduled already, override
-		// the scheduling if this version is newer. Otherwise, don't regossip this message
-		// and let the scheduled regossip occur.
-		if scheduledRegossip != nil {
-			if announceVersion > scheduledRegossip.Version {
-				sb.scheduledAnnounceRegossipsMu.RUnlock()
-				return sb.scheduleAnnounceRegossip(msg, announceVersion, payload)
-			}
-			sb.scheduledAnnounceRegossipsMu.RUnlock()
-			logger.Debug("Announce message is not greater than scheduled regossip version, not regossiping")
-			return nil
-		}
-		sb.scheduledAnnounceRegossipsMu.RUnlock()
-
-		sb.lastAnnounceGossipedMu.RLock()
-		if lastGossiped, ok := sb.lastAnnounceGossiped[msg.Address]; ok {
-			if time.Since(lastGossiped.Time) < announceGossipCooldownDuration {
-				// If this version is newer than the previously regossiped one,
-				// schedule it to be regossiped once the cooldown period is over
-				if lastGossiped.Version < announceVersion {
-					sb.lastAnnounceGossipedMu.RUnlock()
-					logger.Trace("Already regossiped msg from this source address with an older announce version within the cooldown period, scheduling regossip for after the cooldown")
-					return sb.scheduleAnnounceRegossip(msg, announceVersion, payload)
-				}
-				sb.lastAnnounceGossipedMu.RUnlock()
-				logger.Trace("Already regossiped msg from this source address within the cooldown period, not regossiping.")
-				return nil
-			}
-		}
-		sb.lastAnnounceGossipedMu.RUnlock()
-	}
-
-	logger.Trace("Regossiping the istanbul announce message", "IstanbulMsg", msg.String())
-	if err := sb.Multicast(nil, payload, istanbulAnnounceMsg); err != nil {
-		return err
-	}
-
-	sb.lastAnnounceGossiped[msg.Address] = &announceRegossip{
-		Time:    time.Now(),
-		Version: announceVersion,
-	}
-
-	return nil
-}
-
 // signedAnnounceVersion is a signed message from a validator indicating the most
 // recent version of its enode.
 type signedAnnounceVersion struct {
@@ -529,19 +314,6 @@ func (sav *signedAnnounceVersion) Sign(signingFn func(data []byte) ([]byte, erro
 		return err
 	}
 	return nil
-}
-
-func (sav *signedAnnounceVersion) ECDSAPublicKey() (*ecdsa.PublicKey, error) {
-	payloadNoSig, err := sav.payloadNoSig()
-	if err != nil {
-		return nil, err
-	}
-	payloadHash := crypto.Keccak256(payloadNoSig)
-	pubkey, err := crypto.SigToPub(payloadHash, sav.Signature)
-	if err != nil {
-		return nil, err
-	}
-	return pubkey, nil
 }
 
 // ValidateSignature will return an error if a SignedAnnounceVersion's signature

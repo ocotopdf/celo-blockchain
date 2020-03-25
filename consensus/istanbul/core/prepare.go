@@ -61,7 +61,7 @@ func (c *core) verifyPreparedCertificate(preparedCertificate istanbul.PreparedCe
 			return nil, err
 		}
 		// Verify message signed by a validator
-		signer, err := c.validateFn(data, message.Signature)
+		signer, _, err := c.validateFn(data, message.Signature)
 		if err != nil {
 			return nil, err
 		}

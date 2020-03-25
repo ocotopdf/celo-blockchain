@@ -17,6 +17,7 @@
 package core
 
 import (
+	"crypto/ecdsa"
 	"bytes"
 	"fmt"
 	"math"
@@ -52,7 +53,7 @@ type core struct {
 	resendRoundChangeMessageTimer *time.Timer
 	roundChangeTimer              *time.Timer
 
-	validateFn func([]byte, []byte) (common.Address, error)
+	validateFn func([]byte, []byte) (common.Address, *ecdsa.PublicKey, error)
 
 	backlog MsgBacklog
 
@@ -675,8 +676,9 @@ func (c *core) resendRoundChangeMessage() {
 	c.resetResendRoundChangeTimer()
 }
 
-func (c *core) checkValidatorSignature(data []byte, sig []byte) (common.Address, error) {
-	return istanbul.CheckValidatorSignature(c.current.ValidatorSet(), data, sig)
+func (c *core) checkValidatorSignature(data []byte, sig []byte) (common.Address, *ecdsa.PublicKey, error) {
+	signerAddress, _, err :=  istanbul.CheckValidatorSignature(c.current.ValidatorSet(), data, sig)
+	return signerAddress, nil, err
 }
 
 func (c *core) verifyProposal(proposal istanbul.Proposal) (time.Duration, error) {

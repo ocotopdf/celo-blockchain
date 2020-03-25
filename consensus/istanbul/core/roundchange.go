@@ -97,7 +97,7 @@ func (c *core) handleRoundChangeCertificate(proposal istanbul.Subject, roundChan
 			return err
 		}
 
-		signer, err := c.validateFn(data, message.Signature)
+		signer, _, err := c.validateFn(data, message.Signature)
 		if err != nil {
 			return err
 		}
