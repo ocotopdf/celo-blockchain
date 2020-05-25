@@ -69,7 +69,7 @@ func (bc *testBlockChain) SubscribeChainHeadEvent(ch chan<- ChainHeadEvent) even
 	return bc.chainHeadFeed.Subscribe(ch)
 }
 
-func (bc *testBlockChain) Engine() consensus.Engine {
+func (bc *testBlockChain) Engine() consensus.Istanbul {
 	return mockEngine.NewFaker()
 }
 

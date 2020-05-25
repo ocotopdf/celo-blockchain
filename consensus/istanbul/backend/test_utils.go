@@ -52,6 +52,7 @@ func newBlockChainWithKeys(genesis *core.Genesis, nodeKeys []*ecdsa.PrivateKey) 
 	genesis.MustCommit(memDB)
 
 	blockchain, err := core.NewBlockChain(memDB, nil, genesis.Config, b, vm.Config{}, nil)
+
 	if err != nil {
 		panic(err)
 	}

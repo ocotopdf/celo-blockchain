@@ -100,7 +100,7 @@ type Service struct {
 	server    *p2p.Server              // Peer-to-peer server to retrieve networking infos
 	eth       *eth.Ethereum            // Full Ethereum service if monitoring a full node
 	les       *les.LightEthereum       // Light Ethereum service if monitoring a light node
-	engine    consensus.Engine         // Consensus engine to retrieve variadic block fields
+	engine    consensus.Istanbul       // Consensus engine to retrieve variadic block fields
 	backend   *istanbulBackend.Backend // Istanbul consensus backend
 	etherBase common.Address
 	node      string // Name of the node to display on the monitoring page
@@ -120,7 +120,7 @@ func New(url string, ethServ *eth.Ethereum, lesServ *les.LightEthereum) (*Servic
 	}
 	// Assemble and return the stats service
 	var (
-		engine    consensus.Engine
+		engine    consensus.Istanbul
 		etherBase common.Address
 		id        string
 	)

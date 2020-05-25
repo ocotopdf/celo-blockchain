@@ -105,7 +105,7 @@ type testWorkerBackend struct {
 	genesis        *core.Genesis
 }
 
-func newTestWorkerBackend(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine, db ethdb.Database, n int) *testWorkerBackend {
+func newTestWorkerBackend(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Istanbul, db ethdb.Database, n int) *testWorkerBackend {
 	var gspec = core.Genesis{
 		Config: chainConfig,
 		Alloc:  core.GenesisAlloc{testBankAddress: {Balance: testBankFunds}},
@@ -179,7 +179,7 @@ func (b *testWorkerBackend) newRandomTx(creation bool) *types.Transaction {
 	return tx
 }
 
-func newTestWorker(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine, db ethdb.Database, blocks int, shouldAddPendingTxs bool) (*worker, *testWorkerBackend) {
+func newTestWorker(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Istanbul, db ethdb.Database, blocks int, shouldAddPendingTxs bool) (*worker, *testWorkerBackend) {
 	backend := newTestWorkerBackend(t, chainConfig, engine, db, blocks)
 	if shouldAddPendingTxs {
 		backend.txPool.AddLocals(pendingTxs)
@@ -191,7 +191,7 @@ func newTestWorker(t *testing.T, chainConfig *params.ChainConfig, engine consens
 
 func TestGenerateBlockAndImport(t *testing.T) {
 	var (
-		engine      consensus.Engine
+		engine      consensus.Istanbul
 		chainConfig *params.ChainConfig
 		db          = rawdb.NewMemoryDatabase()
 	)
@@ -271,7 +271,7 @@ func TestEmptyWorkIstanbul(t *testing.T) {
 	testEmptyWork(t, istanbulChainConfig, getAuthorizedIstanbulEngine(), true, false)
 }
 
-func testEmptyWork(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine, expectEmptyBlock bool, shouldAddPendingTxs bool) {
+func testEmptyWork(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Istanbul, expectEmptyBlock bool, shouldAddPendingTxs bool) {
 	defer engine.Close()
 
 	w, _ := newTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), 0, shouldAddPendingTxs)
@@ -385,7 +385,7 @@ func TestRegenerateMiningBlockIstanbul(t *testing.T) {
 }
 
 // nolint: unused
-func testRegenerateMiningBlock(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine) {
+func testRegenerateMiningBlock(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Istanbul) {
 	defer engine.Close()
 
 	w, b := newTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), 0, true)
@@ -438,7 +438,7 @@ func testRegenerateMiningBlock(t *testing.T, chainConfig *params.ChainConfig, en
 }
 
 // nolint: unused
-func testAdjustInterval(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine) {
+func testAdjustInterval(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Istanbul) {
 	defer engine.Close()
 
 	w, _ := newTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), 0, true)

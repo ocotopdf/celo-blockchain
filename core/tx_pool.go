@@ -158,7 +158,7 @@ type blockChain interface {
 	SubscribeChainHeadEvent(ch chan<- ChainHeadEvent) event.Subscription
 
 	// Engine retrieves the chain's consensus engine.
-	Engine() consensus.Engine
+	Engine() consensus.Istanbul
 
 	// GetHeader returns the header corresponding to their hash.
 	GetHeader(common.Hash, uint64) *types.Header

@@ -33,11 +33,11 @@ import (
 type statePrefetcher struct {
 	config *params.ChainConfig // Chain configuration options
 	bc     *BlockChain         // Canonical block chain
-	engine consensus.Engine    // Consensus engine used for block rewards
+	engine consensus.Istanbul  // Consensus engine used for block rewards
 }
 
 // newStatePrefetcher initialises a new statePrefetcher.
-func newStatePrefetcher(config *params.ChainConfig, bc *BlockChain, engine consensus.Engine) *statePrefetcher {
+func newStatePrefetcher(config *params.ChainConfig, bc *BlockChain, engine consensus.Istanbul) *statePrefetcher {
 	return &statePrefetcher{
 		config: config,
 		bc:     bc,

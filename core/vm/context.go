@@ -52,7 +52,7 @@ type Message interface {
 // from the blockchain to be used during transaction processing.
 type ChainContext interface {
 	// Engine retrieves the blockchain's consensus engine.
-	Engine() consensus.Engine
+	Engine() consensus.Istanbul
 
 	// GetHeader returns the hash corresponding to the given hash and number.
 	GetHeader(common.Hash, uint64) *types.Header
@@ -84,7 +84,8 @@ func NewEVMContext(msg Message, header *types.Header, chain ChainContext, author
 		beneficiary = *author
 	}
 
-	var engine consensus.Engine
+	var engine consensus.Istanbul
+
 	var getHeaderByNumberFn func(uint64) *types.Header
 	if chain != nil {
 		engine = chain.Engine()

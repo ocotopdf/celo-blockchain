@@ -54,7 +54,7 @@ type LightChain struct {
 	hc            *core.HeaderChain
 	indexerConfig *IndexerConfig
 	chainDb       ethdb.Database
-	engine        consensus.Engine
+	engine        consensus.Istanbul
 	odr           OdrBackend
 	chainFeed     event.Feed
 	chainSideFeed event.Feed
@@ -79,7 +79,7 @@ type LightChain struct {
 // NewLightChain returns a fully initialised light chain using information
 // available in the database. It initialises the default Ethereum header
 // validator.
-func NewLightChain(odr OdrBackend, config *params.ChainConfig, engine consensus.Engine, checkpoint *params.TrustedCheckpoint) (*LightChain, error) {
+func NewLightChain(odr OdrBackend, config *params.ChainConfig, engine consensus.Istanbul, checkpoint *params.TrustedCheckpoint) (*LightChain, error) {
 	bodyCache, _ := lru.New(bodyCacheLimit)
 	bodyRLPCache, _ := lru.New(bodyCacheLimit)
 	blockCache, _ := lru.New(blockCacheLimit)
@@ -206,7 +206,7 @@ func (lc *LightChain) ResetWithGenesisBlock(genesis *types.Block) {
 // Accessors
 
 // Engine retrieves the light chain's consensus engine.
-func (lc *LightChain) Engine() consensus.Engine { return lc.engine }
+func (lc *LightChain) Engine() consensus.Istanbul { return lc.engine }
 
 // Genesis returns the genesis block
 func (lc *LightChain) Genesis() *types.Block {

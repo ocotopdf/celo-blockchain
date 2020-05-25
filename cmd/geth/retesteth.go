@@ -188,7 +188,7 @@ type SRItem struct {
 }
 
 type NoRewardEngine struct {
-	inner     consensus.Engine
+	inner     consensus.Istanbul
 	rewardsOn bool
 }
 
@@ -363,12 +363,15 @@ func (api *RetestethAPI) SetChainParams(ctx context.Context, chainParams ChainPa
 		Alloc:      accounts,
 	}
 	chainConfig, genesisHash, err := core.SetupGenesisBlock(ethDb, genesis)
+
 	if err != nil {
 		return false, err
 	}
+
 	fmt.Printf("Chain config: %v\n", chainConfig)
 
-	var inner consensus.Engine
+	var inner consensus.Istanbul
+
 	switch chainParams.SealEngine {
 	case "NoProof", "NoReward":
 		inner = mockEngine.NewFaker()
@@ -377,7 +380,7 @@ func (api *RetestethAPI) SetChainParams(ctx context.Context, chainParams ChainPa
 	}
 	engine := &NoRewardEngine{inner: inner, rewardsOn: chainParams.SealEngine != "NoReward"}
 
-	blockchain, err := core.NewBlockChain(ethDb, nil, chainConfig, engine, vm.Config{}, nil)
+	blockchain, err := core.NewBlockChain(ethDb, nil, chainConfig, engine.inner, vm.Config{}, nil)
 	if err != nil {
 		return false, err
 	}

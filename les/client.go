@@ -64,7 +64,7 @@ type LightEthereum struct {
 
 	ApiBackend     *LesApiBackend
 	eventMux       *event.TypeMux
-	engine         consensus.Engine
+	engine         consensus.Istanbul
 	accountManager *accounts.Manager
 	netRPCService  *ethapi.PublicNetAPI
 
@@ -259,7 +259,7 @@ func (s *LightEthereum) ResetWithGenesisBlock(gb *types.Block) {
 
 func (s *LightEthereum) BlockChain() *light.LightChain      { return s.blockchain }
 func (s *LightEthereum) TxPool() *light.TxPool              { return s.txPool }
-func (s *LightEthereum) Engine() consensus.Engine           { return s.engine }
+func (s *LightEthereum) Engine() consensus.Istanbul         { return s.engine }
 func (s *LightEthereum) LesVersion() int                    { return int(ClientProtocolVersions[0]) }
 func (s *LightEthereum) Downloader() *downloader.Downloader { return s.handler.downloader }
 func (s *LightEthereum) EventMux() *event.TypeMux           { return s.eventMux }

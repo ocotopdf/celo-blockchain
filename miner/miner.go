@@ -63,14 +63,14 @@ type Miner struct {
 	worker   *worker
 	coinbase common.Address
 	eth      Backend
-	engine   consensus.Engine
+	engine   consensus.Istanbul
 	exitCh   chan struct{}
 
 	canStart    int32 // can start indicates whether we can start the mining operation
 	shouldStart int32 // should start indicates whether we should start after sync
 }
 
-func New(eth Backend, config *Config, chainConfig *params.ChainConfig, mux *event.TypeMux, engine consensus.Engine, isLocalBlock func(block *types.Block) bool, db *ethdb.Database) *Miner {
+func New(eth Backend, config *Config, chainConfig *params.ChainConfig, mux *event.TypeMux, engine consensus.Istanbul, isLocalBlock func(block *types.Block) bool, db *ethdb.Database) *Miner {
 	miner := &Miner{
 		eth:      eth,
 		mux:      mux,

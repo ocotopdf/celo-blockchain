@@ -86,7 +86,7 @@ type Mode uint
 
 // MockEngine provides a minimal fake implementation of a consensus engine for use in blockchain tests.
 type MockEngine struct {
-	consensus.Engine
+	consensus.Istanbul
 
 	mode Mode
 

@@ -38,7 +38,7 @@ import (
 
 // mockEngine provides functions used by precompiles for testing.
 type mockEngine struct {
-	consensus.Engine
+	consensus.Istanbul
 }
 
 func (e mockEngine) VerifySeal(_ consensus.ChainReader, header *types.Header) error {
@@ -108,7 +108,7 @@ func (c mockChainContext) Config() *params.ChainConfig {
 	return &params.ChainConfig{Istanbul: &params.IstanbulConfig{}}
 }
 
-func (c mockChainContext) Engine() consensus.Engine {
+func (c mockChainContext) Engine() consensus.Istanbul {
 	return mockEngine{}
 }
 

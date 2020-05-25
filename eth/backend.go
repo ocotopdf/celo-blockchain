@@ -81,7 +81,7 @@ type Ethereum struct {
 	chainDb ethdb.Database // Block chain database
 
 	eventMux       *event.TypeMux
-	engine         consensus.Engine
+	engine         consensus.Istanbul
 	accountManager *accounts.Manager
 
 	bloomRequests chan chan *bloombits.Retrieval // Channel receiving bloom data retrieval requests
@@ -279,7 +279,7 @@ func makeExtraData(extra []byte) []byte {
 }
 
 // CreateConsensusEngine creates the required type of consensus engine instance for an Ethereum service
-func CreateConsensusEngine(ctx *node.ServiceContext, chainConfig *params.ChainConfig, config *Config, notify []string, noverify bool, db ethdb.Database) consensus.Engine {
+func CreateConsensusEngine(ctx *node.ServiceContext, chainConfig *params.ChainConfig, config *Config, notify []string, noverify bool, db ethdb.Database) consensus.Istanbul {
 	if chainConfig.Faker {
 		return mockEngine.NewFaker()
 	}
@@ -548,7 +548,7 @@ func (s *Ethereum) BlockChain() *core.BlockChain        { return s.blockchain }
 func (s *Ethereum) Config() *Config                     { return s.config }
 func (s *Ethereum) TxPool() *core.TxPool                { return s.txPool }
 func (s *Ethereum) EventMux() *event.TypeMux            { return s.eventMux }
-func (s *Ethereum) Engine() consensus.Engine            { return s.engine }
+func (s *Ethereum) Engine() consensus.Istanbul          { return s.engine }
 func (s *Ethereum) ChainDb() ethdb.Database             { return s.chainDb }
 func (s *Ethereum) IsListening() bool                   { return true } // Always listening
 func (s *Ethereum) EthVersion() int                     { return int(ProtocolVersions[0]) }

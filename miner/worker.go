@@ -133,7 +133,7 @@ type intervalAdjust struct {
 type worker struct {
 	config      *Config
 	chainConfig *params.ChainConfig
-	engine      consensus.Engine
+	engine      consensus.Istanbul
 	eth         Backend
 	chain       *core.BlockChain
 
@@ -186,7 +186,7 @@ type worker struct {
 	db *ethdb.Database
 }
 
-func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus.Engine, eth Backend, mux *event.TypeMux, isLocalBlock func(*types.Block) bool, db *ethdb.Database, init bool) *worker {
+func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus.Istanbul, eth Backend, mux *event.TypeMux, isLocalBlock func(*types.Block) bool, db *ethdb.Database, init bool) *worker {
 	worker := &worker{
 		config:             config,
 		chainConfig:        chainConfig,

@@ -111,7 +111,7 @@ type Context struct {
 
 	Header *types.Header
 
-	Engine consensus.Engine
+	Engine consensus.Istanbul
 }
 
 // EVM is the Ethereum Virtual Machine base object and provides
